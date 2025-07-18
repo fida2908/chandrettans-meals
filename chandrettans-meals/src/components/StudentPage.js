@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { db } from '../firebase';
 import {
-  collection, doc, getDoc, query, orderBy, onSnapshot, updateDoc,
+  collection, doc, getDoc, query, orderBy, onSnapshot,
   runTransaction, serverTimestamp, where
 } from 'firebase/firestore';
 import { useNavigate } from 'react-router-dom';
@@ -15,7 +15,7 @@ export default function StudentPage() {
   const [message, setMessage] = useState('');
   const [stock, setStock] = useState(null);
   const [counts, setCounts] = useState({});
-  const [myOrders, setMyOrders] = useState([]); // ✅ student’s own orders
+  const [myOrders, setMyOrders] = useState([]);
 
   const navigate = useNavigate();
 
@@ -59,7 +59,7 @@ export default function StudentPage() {
       unsubscribeAll();
       unsubscribeMine();
     };
-  }, [collegeId]); // re-run if collegeId changes
+  }, [collegeId]);
 
   const placeOrder = async (e) => {
     e.preventDefault();
@@ -89,8 +89,7 @@ export default function StudentPage() {
           quantity: Number(quantity),
           timeSlot,
           time: serverTimestamp(),
-          status: "Order Placed",  // ✅ new field
-          gotIt: false            // ✅ new field
+          status: "pending" // ✅ default status from admin
         });
       });
 
@@ -99,15 +98,6 @@ export default function StudentPage() {
     } catch (error) {
       console.error('Order error:', error);
       setMessage(typeof error === 'string' ? error : "❌ Failed to place order");
-    }
-  };
-
-  const markGotIt = async (orderId) => {
-    try {
-      const orderRef = doc(db, "orders", orderId);
-      await updateDoc(orderRef, { gotIt: true });
-    } catch (err) {
-      console.error("Failed to mark got it", err);
     }
   };
 
@@ -168,7 +158,7 @@ export default function StudentPage() {
           )}
         </form>
 
-        {/* ✅ My Orders List */}
+        {/* My Orders List */}
         <div style={{ width: '100%', maxWidth: '500px', backgroundColor: 'white', padding: '10px', borderRadius: '8px', border: '1px solid #ccc' }}>
           <h5>📋 My Orders</h5>
           {myOrders.length === 0 ? <p>No orders yet.</p> : (
@@ -178,7 +168,6 @@ export default function StudentPage() {
                   <th>Item</th>
                   <th>Qty</th>
                   <th>Status</th>
-                  <th>Got it?</th>
                 </tr>
               </thead>
               <tbody>
@@ -187,11 +176,6 @@ export default function StudentPage() {
                     <td>{order.item}</td>
                     <td>{order.quantity}</td>
                     <td>{order.status}</td>
-                    <td>
-                      {order.gotIt ? '✅' : (
-                        <button onClick={() => markGotIt(order.id)} className="btn btn-sm btn-outline-success">Mark</button>
-                      )}
-                    </td>
                   </tr>
                 ))}
               </tbody>
