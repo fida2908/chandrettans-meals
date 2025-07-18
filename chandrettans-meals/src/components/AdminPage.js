@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { db } from '../firebase';
-import { collection, query, orderBy, onSnapshot, doc, getDoc } from 'firebase/firestore';
+import { collection, query, orderBy, onSnapshot, doc, getDoc, updateDoc } from 'firebase/firestore';
 
 export default function AdminPage() {
   const [orders, setOrders] = useState([]);
@@ -8,13 +8,11 @@ export default function AdminPage() {
   const [counts, setCounts] = useState({});
 
   useEffect(() => {
-    // Listen to orders collection in real time
     const q = query(collection(db, "orders"), orderBy("time", "desc"));
     const unsubscribe = onSnapshot(q, snapshot => {
       const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       setOrders(data);
 
-      // Calculate live counts
       const itemCounts = {};
       data.forEach(order => {
         const key = order.item?.toLowerCase();
@@ -23,7 +21,6 @@ export default function AdminPage() {
       setCounts(itemCounts);
     });
 
-    // Fetch current stock
     const fetchStock = async () => {
       const stockRef = doc(db, "stock", "current");
       const stockSnap = await getDoc(stockRef);
@@ -39,6 +36,23 @@ export default function AdminPage() {
   // Separate orders by timeSlot
   const breakOrders = orders.filter(order => order.timeSlot === "10:30 AM Break");
   const lunchOrders = orders.filter(order => order.timeSlot === "1:00 PM Lunch");
+
+  // Handlers
+  const handleStatusChange = async (orderId, newStatus) => {
+    try {
+      const orderRef = doc(db, "orders", orderId);
+      await updateDoc(orderRef, { status: newStatus });
+    } catch (error) {
+      console.error("Failed to update order status:", error);
+    }
+  };
+
+  // A helper to show status text with color
+  const renderStatus = (status) => {
+    if (status === "accepted") return <span style={{ color: "green" }}>✔ Accepted</span>;
+    if (status === "cancelled") return <span style={{ color: "red" }}>✖ Cancelled</span>;
+    return <span style={{ color: "gray" }}>⏳ Pending</span>;
+  };
 
   return (
     <div style={{ backgroundColor: '#e6ffe6', minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
@@ -58,6 +72,8 @@ export default function AdminPage() {
                 <th>Item</th>
                 <th>Qty</th>
                 <th>Time</th>
+                <th>Status</th>
+                <th>Action</th>
               </tr>
             </thead>
             <tbody>
@@ -67,6 +83,11 @@ export default function AdminPage() {
                   <td>{order.item}</td>
                   <td>{order.quantity}</td>
                   <td>{order.time?.toDate?.().toLocaleTimeString?.() || 'N/A'}</td>
+                  <td>{renderStatus(order.status)}</td>
+                  <td>
+                    <button onClick={() => handleStatusChange(order.id, "accepted")} className="btn btn-success btn-sm me-1">Accept</button>
+                    <button onClick={() => handleStatusChange(order.id, "cancelled")} className="btn btn-danger btn-sm">Cancel</button>
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -83,6 +104,8 @@ export default function AdminPage() {
                 <th>Item</th>
                 <th>Qty</th>
                 <th>Time</th>
+                <th>Status</th>
+                <th>Action</th>
               </tr>
             </thead>
             <tbody>
@@ -92,6 +115,11 @@ export default function AdminPage() {
                   <td>{order.item}</td>
                   <td>{order.quantity}</td>
                   <td>{order.time?.toDate?.().toLocaleTimeString?.() || 'N/A'}</td>
+                  <td>{renderStatus(order.status)}</td>
+                  <td>
+                    <button onClick={() => handleStatusChange(order.id, "accepted")} className="btn btn-success btn-sm me-1">Accept</button>
+                    <button onClick={() => handleStatusChange(order.id, "cancelled")} className="btn btn-danger btn-sm">Cancel</button>
+                  </td>
                 </tr>
               ))}
             </tbody>
