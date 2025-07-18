@@ -8,15 +8,16 @@ export default function AdminPage() {
   const [counts, setCounts] = useState({});
 
   useEffect(() => {
+    // Listen to orders collection in real time
     const q = query(collection(db, "orders"), orderBy("time", "desc"));
     const unsubscribe = onSnapshot(q, snapshot => {
       const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       setOrders(data);
 
-      // Count number of orders per item
+      // Calculate live counts
       const itemCounts = {};
       data.forEach(order => {
-        const key = order.item.toLowerCase();
+        const key = order.item?.toLowerCase();
         itemCounts[key] = (itemCounts[key] || 0) + Number(order.quantity || 1);
       });
       setCounts(itemCounts);
@@ -24,10 +25,10 @@ export default function AdminPage() {
 
     // Fetch current stock
     const fetchStock = async () => {
-      const docRef = doc(db, "stock", "current");
-      const docSnap = await getDoc(docRef);
-      if (docSnap.exists()) {
-        setStock(docSnap.data());
+      const stockRef = doc(db, "stock", "current");
+      const stockSnap = await getDoc(stockRef);
+      if (stockSnap.exists()) {
+        setStock(stockSnap.data());
       }
     };
     fetchStock();
@@ -35,19 +36,21 @@ export default function AdminPage() {
     return unsubscribe;
   }, []);
 
-  return (
-    <div style={{ backgroundColor: '#e6ffe6', minHeight: '100vh', padding: '20px', display: 'flex', flexDirection: 'column' }}>
+  // Separate orders by timeSlot
+  const breakOrders = orders.filter(order => order.timeSlot === "10:30 AM Break");
+  const lunchOrders = orders.filter(order => order.timeSlot === "1:00 PM Lunch");
 
+  return (
+    <div style={{ backgroundColor: '#e6ffe6', minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
       {/* Header */}
       <header style={{ backgroundColor: '#006400', color: 'white', padding: '10px 20px', textAlign: 'center' }}>
         🍛 Chandrettan's Meals - Admin Panel
       </header>
 
-      <div style={{ flex: 1, display: 'flex', flexWrap: 'wrap', gap: '20px', justifyContent: 'center', marginTop: '20px' }}>
-        
-        {/* Today's Orders */}
+      <div style={{ flex: 1, display: 'flex', flexWrap: 'wrap', gap: '20px', justifyContent: 'center', marginTop: '20px', padding: '10px' }}>
+        {/* 10:30 AM Break Orders */}
         <div style={{ flex: '1 1 500px', backgroundColor: 'white', border: '2px solid #FFD700', borderRadius: '8px', padding: '15px', maxWidth: '600px' }}>
-          <h5 className="mb-3">📋 Today's Orders</h5>
+          <h5 className="mb-3">☕ Orders - 10:30 AM Break</h5>
           <table className="table table-sm">
             <thead>
               <tr>
@@ -58,7 +61,7 @@ export default function AdminPage() {
               </tr>
             </thead>
             <tbody>
-              {orders.map(order => (
+              {breakOrders.map(order => (
                 <tr key={order.id}>
                   <td>{order.collegeId}</td>
                   <td>{order.item}</td>
@@ -70,31 +73,48 @@ export default function AdminPage() {
           </table>
         </div>
 
-        {/* Stock / Remaining Count */}
+        {/* 1:00 PM Lunch Orders */}
+        <div style={{ flex: '1 1 500px', backgroundColor: 'white', border: '2px solid #FFD700', borderRadius: '8px', padding: '15px', maxWidth: '600px' }}>
+          <h5 className="mb-3">🍛 Orders - 1:00 PM Lunch</h5>
+          <table className="table table-sm">
+            <thead>
+              <tr>
+                <th>College ID</th>
+                <th>Item</th>
+                <th>Qty</th>
+                <th>Time</th>
+              </tr>
+            </thead>
+            <tbody>
+              {lunchOrders.map(order => (
+                <tr key={order.id}>
+                  <td>{order.collegeId}</td>
+                  <td>{order.item}</td>
+                  <td>{order.quantity}</td>
+                  <td>{order.time?.toDate?.().toLocaleTimeString?.() || 'N/A'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Stock & Remaining */}
         <div style={{ flex: '1 1 300px', backgroundColor: 'white', border: '2px solid #FFD700', borderRadius: '8px', padding: '15px', maxWidth: '300px' }}>
           <h5 className="mb-3">📦 Stock & Status</h5>
           {stock ? (
             <ul className="list-group">
-              <li className="list-group-item d-flex justify-content-between align-items-center">
-                🍛 Meals 
-                <span>{counts['meal'] >= stock.meals ? 'Finished' : stock.meals - (counts['meal'] || 0)}</span>
-              </li>
-              <li className="list-group-item d-flex justify-content-between align-items-center">
-                ☕ Chai 
-                <span>{counts['chai'] >= stock.chai ? 'Finished' : stock.chai - (counts['chai'] || 0)}</span>
-              </li>
-              <li className="list-group-item d-flex justify-content-between align-items-center">
-                🥟 Pazhampori 
-                <span>{counts['pazhampori'] >= stock.pazhampori ? 'Finished' : stock.pazhampori - (counts['pazhampori'] || 0)}</span>
-              </li>
-              <li className="list-group-item d-flex justify-content-between align-items-center">
-                🥟 Samosa 
-                <span>{counts['samosa'] >= stock.samosa ? 'Finished' : stock.samosa - (counts['samosa'] || 0)}</span>
-              </li>
-              <li className="list-group-item d-flex justify-content-between align-items-center">
-                🥟 Cutlet 
-                <span>{counts['cutlet'] >= stock.cutlet ? 'Finished' : stock.cutlet - (counts['cutlet'] || 0)}</span>
-              </li>
+              {['meal', 'chai', 'pazhampori', 'samosa', 'cutlet'].map(key => (
+                <li key={key} className="list-group-item d-flex justify-content-between align-items-center">
+                  {key === 'meal' && '🍛 Meals'}
+                  {key === 'chai' && '☕ Chai'}
+                  {key === 'pazhampori' && '🥟 Pazhampori'}
+                  {key === 'samosa' && '🥟 Samosa'}
+                  {key === 'cutlet' && '🥟 Cutlet'}
+                  <span>
+                    {counts[key] >= stock[key] ? 'Finished' : stock[key] - (counts[key] || 0)}
+                  </span>
+                </li>
+              ))}
             </ul>
           ) : (
             <p>Loading stock...</p>

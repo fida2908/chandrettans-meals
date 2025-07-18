@@ -1,6 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { db } from '../firebase';
-import { collection, addDoc, serverTimestamp, doc, getDoc, query, orderBy, onSnapshot } from 'firebase/firestore';
+import {
+  collection, doc, getDoc, query, orderBy, onSnapshot,
+  runTransaction, serverTimestamp
+} from 'firebase/firestore';
 import { useNavigate } from 'react-router-dom';
 
 export default function StudentPage() {
@@ -17,6 +20,7 @@ export default function StudentPage() {
   const selectedItemKey = item === "Snacks" ? snack : item.toLowerCase();
 
   useEffect(() => {
+    // Fetch stock once
     const fetchStock = async () => {
       const docRef = doc(db, "stock", "current");
       const docSnap = await getDoc(docRef);
@@ -26,6 +30,7 @@ export default function StudentPage() {
     };
     fetchStock();
 
+    // Live orders count
     const q = query(collection(db, "orders"), orderBy("time", "desc"));
     const unsubscribe = onSnapshot(q, snapshot => {
       const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
@@ -47,35 +52,43 @@ export default function StudentPage() {
       return;
     }
 
-    // Compute remainingCount inside the function from latest state
-    const orderedSoFar = counts[selectedItemKey] || 0;
-    const currentStock = stock[selectedItemKey] || 0;
-    const remainingCount = Math.max(currentStock - orderedSoFar, 0);
-
-    if (remainingCount <= 0) {
-      setMessage(`❌ ${selectedItemKey.charAt(0).toUpperCase() + selectedItemKey.slice(1)} is finished!`);
-      return;
-    }
-
-    if (Number(quantity) > remainingCount) {
-      setMessage(`❌ Only ${remainingCount} left for ${selectedItemKey}!`);
-      return;
-    }
-
     try {
-      await addDoc(collection(db, "orders"), {
-        collegeId,
-        item: item === "Snacks" ? snack : item,
-        quantity: Number(quantity),
-        timeSlot,
-        time: serverTimestamp()
+      await runTransaction(db, async (transaction) => {
+        const stockRef = doc(db, "stock", "current");
+        const stockDoc = await transaction.get(stockRef);
+        if (!stockDoc.exists()) {
+          throw "Stock document missing!";
+        }
+
+        const stockData = stockDoc.data();
+        const totalStock = stockData[selectedItemKey] || 0;
+        const ordered = counts[selectedItemKey] || 0;
+        const remaining = Math.max(totalStock - ordered, 0);
+
+        if (remaining <= 0) {
+          throw `❌ ${selectedItemKey.charAt(0).toUpperCase() + selectedItemKey.slice(1)} is finished!`;
+        }
+        if (Number(quantity) > remaining) {
+          throw `❌ Only ${remaining} left for ${selectedItemKey}!`;
+        }
+
+        // Add order
+        const newOrderRef = doc(collection(db, "orders"));
+        transaction.set(newOrderRef, {
+          collegeId,
+          item: item === "Snacks" ? snack : item,
+          quantity: Number(quantity),
+          timeSlot,
+          time: serverTimestamp()
+        });
       });
+
       setMessage("✅ Order placed!");
       setCollegeId('');
       setQuantity(1);
-    } catch (err) {
-      console.error(err);
-      setMessage("❌ Error placing order");
+    } catch (error) {
+      console.error('Order error:', error);
+      setMessage(typeof error === 'string' ? error : "❌ Failed to place order");
     }
   };
 
@@ -83,7 +96,6 @@ export default function StudentPage() {
     navigate('/admin-login');
   };
 
-  // Compute display remaining count to show in UI
   const orderedSoFar = counts[selectedItemKey] || 0;
   const displayRemaining = stock ? Math.max(stock[selectedItemKey] - orderedSoFar, 0) : null;
 
